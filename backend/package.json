@@ -12,10 +12,12 @@
   "description": "",
   "dependencies": {
     "apollo-server": "^3.13.0",
+    "apollo-server-micro": "^3.13.0",
     "axios": "^1.11.0",
     "cors": "^2.8.5",
     "dotenv": "^17.2.1",
     "graphql": "^16.11.0",
+    "micro-cors": "^0.1.1",
     "replicate": "^1.0.1"
   }
 }
