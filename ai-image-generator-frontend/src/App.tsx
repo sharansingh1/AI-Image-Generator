@@ -105,14 +105,6 @@ const AIImageGenerator = () => {
           </div>
           <span className="text-2xl font-bold text-white tracking-tight">imaginAI</span>
         </div>
-        <div className="hidden md:flex items-center space-x-8">
-          <button className="text-gray-300 hover:text-white transition-colors">Gallery</button>
-          <button className="text-gray-300 hover:text-white transition-colors">Pricing</button>
-          <button className="text-gray-300 hover:text-white transition-colors">About</button>
-          <button className="bg-white/10 backdrop-blur-sm text-white px-6 py-2 rounded-full hover:bg-white/20 transition-all duration-300 border border-white/20">
-            Get in touch
-          </button>
-        </div>
         <button className="md:hidden text-white" onClick={() => setMobileMenuOpen(!mobileMenuOpen)}>
           {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
         </button>
@@ -146,7 +138,6 @@ const AIImageGenerator = () => {
               imagination
             </h1>
             <p className="text-xl text-gray-300 leading-relaxed max-w-lg">
-              Transform your ideas into stunning visuals with our advanced AI.
               Create professional-quality images in seconds.
             </p>
             <div className="flex items-center space-x-6 pt-4">
