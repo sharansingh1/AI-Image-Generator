@@ -1,8 +1,7 @@
 import { ApolloServer, gql } from 'apollo-server-micro'
-import axios from 'axios'
 import Cors from 'micro-cors'
 
-const cors = Cors()
+// Paste your existing typeDefs and resolvers here, or import them
 
 const typeDefs = gql`
   type Query {
@@ -20,17 +19,18 @@ const typeDefs = gql`
 
 const resolvers = {
     Query: {
-        async generateImages(_, { prompt, negativePrompt, width, height, cfgScale, seed, samples }) {
-            // ... your existing generateImages logic here ...
-            // Copy the whole function from your original backend file.
-        }
-    }
+        async generateImages(_, args) {
+            // Your existing resolver code here
+        },
+    },
 }
 
-const apolloServer = new ApolloServer({
-    typeDefs,
-    resolvers,
+const cors = Cors({
+    origin: '*',  // You can customize allowed origins here
+    allowMethods: ['POST', 'GET', 'OPTIONS'],
 })
+
+const apolloServer = new ApolloServer({ typeDefs, resolvers })
 
 const startServer = apolloServer.start()
 
@@ -40,13 +40,11 @@ export default cors(async function handler(req, res) {
         return false
     }
     await startServer
-    await apolloServer.createHandler({
-        path: '/api/graphql',
-    })(req, res)
+    await apolloServer.createHandler({ path: '/api/graphql' })(req, res)
 })
 
 export const config = {
     api: {
-        bodyParser: false,
+        bodyParser: false, // Apollo Server handles body parsing itself
     },
 }
