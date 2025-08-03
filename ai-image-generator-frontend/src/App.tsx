@@ -1,354 +1,310 @@
-import React, { useState, useEffect } from 'react';
-import { ApolloClient, InMemoryCache, ApolloProvider, gql, useLazyQuery } from '@apollo/client';
-import { Loader2, Download, Sparkles, Image as ImageIcon } from 'lucide-react';
-import './App.css';
+import React, { useState, useRef, useEffect } from 'react';
+import { Camera, Download, Sparkles, Zap, Palette, ImageIcon, ChevronDown, Menu, X } from 'lucide-react';
 
-// Apollo Client setup
-const client = new ApolloClient({
-  uri: 'http://localhost:4000', // Your GraphQL server
-  cache: new InMemoryCache(),
-});
-
-// GraphQL query
-const GENERATE_IMAGES = gql`
-  query GenerateImages(
-    $prompt: String!
-    $negativePrompt: String
-    $width: Int
-    $height: Int
-    $cfgScale: Float
-    $seed: Int
-    $samples: Int
-  ) {
-    generateImages(
-      prompt: $prompt
-      negativePrompt: $negativePrompt
-      width: $width
-      height: $height
-      cfgScale: $cfgScale
-      seed: $seed
-      samples: $samples
-    )
-  }
-`;
-
-interface GeneratedImage {
-  id: string;
-  url: string;
-  prompt: string;
-  timestamp: number;
-}
-
-const ImageGenerator: React.FC = () => {
+const AIImageGenerator = () => {
   const [prompt, setPrompt] = useState('');
-  const [negativePrompt, setNegativePrompt] = useState('');
-  const [currentImages, setCurrentImages] = useState<string[]>([]);
-  const [gallery, setGallery] = useState<GeneratedImage[]>([]);
-  const [showAdvanced, setShowAdvanced] = useState(false);
-  const [settings, setSettings] = useState({
-    width: 1024,
-    height: 1024,
-    cfgScale: 7,
-    samples: 4,
-  });
+  const [generatedImages, setGeneratedImages] = useState<string[]>([]);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [selectedStyle, setSelectedStyle] = useState('enhance');
+  const [showStyleDropdown, setShowStyleDropdown] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
-  const [generateImages, { loading, error }] = useLazyQuery(GENERATE_IMAGES, {
-    onCompleted: (data) => {
-      const newImages = data.generateImages;
-      setCurrentImages(newImages);
+  const styles = [
+    { id: 'enhance', name: 'Enhanced', description: 'High quality, detailed' },
+    { id: 'artistic', name: 'Artistic', description: 'Creative, stylized' },
+    { id: 'photorealistic', name: 'Photorealistic', description: 'Natural, realistic' },
+    { id: 'cinematic', name: 'Cinematic', description: 'Movie-like quality' },
+    { id: 'abstract', name: 'Abstract', description: 'Creative, unique' }
+  ];
 
-      // Add to gallery
-      const newGalleryItems: GeneratedImage[] = newImages.map((url: string, index: number) => ({
-        id: `${Date.now()}-${index}`,
-        url,
-        prompt,
-        timestamp: Date.now(),
-      }));
-
-      const updatedGallery = [...newGalleryItems, ...gallery].slice(0, 50); // Keep last 50 images
-      setGallery(updatedGallery);
-      localStorage.setItem('ai-image-gallery', JSON.stringify(updatedGallery));
-    },
-    onError: (error) => {
-      console.error('Generation error:', error);
-    }
-  });
-
-  // Load gallery from localStorage on mount
   useEffect(() => {
-    const saved = localStorage.getItem('ai-image-gallery');
-    if (saved) {
-      try {
-        setGallery(JSON.parse(saved));
-      } catch (e) {
-        console.error('Error loading gallery:', e);
+    const interval = setInterval(() => {
+      if (generatedImages.length > 0) {
+        setCurrentImageIndex((prev) => (prev + 1) % generatedImages.length);
       }
-    }
-  }, []);
+    }, 3000);
+    return () => clearInterval(interval);
+  }, [generatedImages.length]);
 
-  const handleGenerate = () => {
+  const generateImages = async () => {
     if (!prompt.trim()) return;
+    setIsGenerating(true);
 
-    generateImages({
-      variables: {
-        prompt: prompt.trim(),
-        negativePrompt: negativePrompt.trim() || null,
-        ...settings,
-      },
-    });
+    try {
+      const response = await fetch('http://localhost:4000/graphql', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query: `
+            query GenerateImages(
+              $prompt: String!
+              $negativePrompt: String
+              $width: Int
+              $height: Int
+              $cfgScale: Float
+              $seed: Int
+              $samples: Int
+            ) {
+              generateImages(
+                prompt: $prompt
+                negativePrompt: $negativePrompt
+                width: $width
+                height: $height
+                cfgScale: $cfgScale
+                seed: $seed
+                samples: $samples
+              )
+            }
+          `,
+          variables: {
+            prompt: `${prompt}, ${selectedStyle} style`,
+            negativePrompt: "",
+            width: 1024,
+            height: 1024,
+            cfgScale: 7,
+            seed: Math.floor(Math.random() * 100000),
+            samples: 3
+          }
+        })
+      });
+
+      const data = await response.json();
+      if (data.data?.generateImages) {
+        setGeneratedImages(data.data.generateImages);
+        setCurrentImageIndex(0);
+      }
+    } catch (error) {
+      console.error('Error generating images:', error);
+    }
+    setIsGenerating(false);
   };
 
-  const downloadImage = (url: string, prompt: string) => {
+  const downloadImage = (imageData: string, index: number) => {
     const link = document.createElement('a');
-    link.href = url;
-    link.download = `ai-generated-${prompt.slice(0, 30).replace(/[^a-zA-Z0-9]/g, '-')}.png`;
+    link.href = imageData;
+    link.download = `ai-generated-image-${index + 1}.png`;
     link.click();
   };
 
-  const clearGallery = () => {
-    setGallery([]);
-    localStorage.removeItem('ai-image-gallery');
-  };
-
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
-      <div className="container mx-auto px-4 py-8 max-w-6xl">
-        {/* Header */}
-        <header className="text-center mb-12">
-          <div className="flex items-center justify-center gap-3 mb-4">
-            <div className="p-3 bg-gradient-to-br from-blue-500 to-purple-600 rounded-2xl shadow-lg">
-              <Sparkles className="w-8 h-8 text-white" />
-            </div>
-            <h1 className="text-5xl font-bold bg-gradient-to-r from-gray-800 to-gray-600 bg-clip-text text-transparent">
-              AI Image Generator
-            </h1>
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 relative overflow-hidden">
+      {/* Animated background elements */}
+      <div className="absolute inset-0 overflow-hidden">
+        <div className="absolute -top-40 -right-40 w-80 h-80 bg-purple-500 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-pulse"></div>
+        <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-cyan-500 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-pulse delay-1000"></div>
+        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-80 h-80 bg-pink-500 rounded-full mix-blend-multiply filter blur-xl opacity-10 animate-pulse delay-500"></div>
+      </div>
+
+      {/* Navigation */}
+      <nav className="relative z-10 flex items-center justify-between p-6 lg:px-12">
+        <div className="flex items-center space-x-3">
+          <div className="w-10 h-10 bg-gradient-to-r from-cyan-400 to-purple-500 rounded-xl flex items-center justify-center">
+            <Sparkles className="w-6 h-6 text-white" />
           </div>
-          <p className="text-gray-600 text-lg max-w-2xl mx-auto">
-            Transform your imagination into stunning visuals with our advanced AI technology
-          </p>
-        </header>
+          <span className="text-2xl font-bold text-white tracking-tight">imaginAI</span>
+        </div>
+        <div className="hidden md:flex items-center space-x-8">
+          <button className="text-gray-300 hover:text-white transition-colors">Gallery</button>
+          <button className="text-gray-300 hover:text-white transition-colors">Pricing</button>
+          <button className="text-gray-300 hover:text-white transition-colors">About</button>
+          <button className="bg-white/10 backdrop-blur-sm text-white px-6 py-2 rounded-full hover:bg-white/20 transition-all duration-300 border border-white/20">
+            Get in touch
+          </button>
+        </div>
+        <button className="md:hidden text-white" onClick={() => setMobileMenuOpen(!mobileMenuOpen)}>
+          {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+        </button>
+      </nav>
 
-        {/* Main Generator Section */}
-        <div className="bg-white rounded-3xl shadow-xl p-8 mb-12 border border-gray-100">
-          <div className="max-w-2xl mx-auto">
-            {/* Prompt Input */}
-            <div className="mb-6">
-              <label htmlFor="prompt" className="block text-sm font-semibold text-gray-700 mb-3">
-                Describe your image
-              </label>
-              <textarea
-                id="prompt"
-                value={prompt}
-                onChange={(e) => setPrompt(e.target.value)}
-                placeholder="A serene landscape with mountains and a crystal clear lake at sunset..."
-                className="w-full p-4 border-2 border-gray-200 rounded-2xl focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all duration-200 resize-none h-24 text-gray-700"
-                disabled={loading}
-              />
-            </div>
-
-            {/* Advanced Settings Toggle */}
-            <div className="mb-6">
-              <button
-                onClick={() => setShowAdvanced(!showAdvanced)}
-                className="text-blue-600 hover:text-blue-700 font-medium transition-colors"
-              >
-                {showAdvanced ? 'Hide' : 'Show'} Advanced Settings
-              </button>
-            </div>
-
-            {/* Advanced Settings */}
-            {showAdvanced && (
-              <div className="mb-6 p-6 bg-gray-50 rounded-2xl border border-gray-200">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Width: {settings.width}px
-                    </label>
-                    <input
-                      type="range"
-                      min="512"
-                      max="1536"
-                      step="64"
-                      value={settings.width}
-                      onChange={(e) => setSettings({ ...settings, width: parseInt(e.target.value) })}
-                      className="w-full accent-blue-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Height: {settings.height}px
-                    </label>
-                    <input
-                      type="range"
-                      min="512"
-                      max="1536"
-                      step="64"
-                      value={settings.height}
-                      onChange={(e) => setSettings({ ...settings, height: parseInt(e.target.value) })}
-                      className="w-full accent-blue-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      CFG Scale: {settings.cfgScale}
-                    </label>
-                    <input
-                      type="range"
-                      min="1"
-                      max="20"
-                      step="0.5"
-                      value={settings.cfgScale}
-                      onChange={(e) => setSettings({ ...settings, cfgScale: parseFloat(e.target.value) })}
-                      className="w-full accent-blue-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Images: {settings.samples}
-                    </label>
-                    <input
-                      type="range"
-                      min="1"
-                      max="4"
-                      step="1"
-                      value={settings.samples}
-                      onChange={(e) => setSettings({ ...settings, samples: parseInt(e.target.value) })}
-                      className="w-full accent-blue-500"
-                    />
-                  </div>
-                </div>
-                <div>
-                  <label htmlFor="negativePrompt" className="block text-sm font-medium text-gray-700 mb-2">
-                    Negative Prompt (what to avoid)
-                  </label>
-                  <input
-                    id="negativePrompt"
-                    type="text"
-                    value={negativePrompt}
-                    onChange={(e) => setNegativePrompt(e.target.value)}
-                    placeholder="blurry, low quality, distorted..."
-                    className="w-full p-3 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all"
-                  />
-                </div>
-              </div>
-            )}
-
-            {/* Generate Button */}
-            <button
-              onClick={handleGenerate}
-              disabled={loading || !prompt.trim()}
-              className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 disabled:from-gray-400 disabled:to-gray-500 text-white font-bold py-4 px-8 rounded-2xl transition-all duration-200 transform hover:scale-[1.02] disabled:scale-100 shadow-lg disabled:shadow-none flex items-center justify-center gap-3 text-lg"
-            >
-              {loading ? (
-                <>
-                  <Loader2 className="w-6 h-6 animate-spin" />
-                  Generating Images...
-                </>
-              ) : (
-                <>
-                  <Sparkles className="w-6 h-6" />
-                  Generate Images
-                </>
-              )}
+      {mobileMenuOpen && (
+        <div className="md:hidden absolute top-20 left-0 right-0 bg-black/90 backdrop-blur-sm z-50 p-6">
+          <div className="flex flex-col space-y-4">
+            <button className="text-gray-300 hover:text-white transition-colors text-left">Gallery</button>
+            <button className="text-gray-300 hover:text-white transition-colors text-left">Pricing</button>
+            <button className="text-gray-300 hover:text-white transition-colors text-left">About</button>
+            <button className="bg-white/10 backdrop-blur-sm text-white px-6 py-2 rounded-full hover:bg-white/20 transition-all duration-300 border border-white/20 text-left">
+              Get in touch
             </button>
+          </div>
+        </div>
+      )}
 
-            {/* Error Display */}
-            {error && (
-              <div className="mt-6 p-4 bg-red-50 border border-red-200 rounded-xl">
-                <p className="text-red-700 font-medium">Error generating images:</p>
-                <p className="text-red-600 text-sm mt-1">{error.message}</p>
+      {/* Main Content */}
+      <div className="relative z-10 max-w-7xl mx-auto px-6 lg:px-12 pt-12 lg:pt-20">
+        {/* Hero + Preview */}
+        <div className="grid lg:grid-cols-2 gap-12 lg:gap-20 items-center">
+          <div className="space-y-8">
+            <h1 className="text-6xl lg:text-7xl font-bold text-white leading-tight tracking-tight">
+              creation
+              <br />
+              <span className="bg-gradient-to-r from-cyan-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">
+                through
+              </span>
+              <br />
+              imagination
+            </h1>
+            <p className="text-xl text-gray-300 leading-relaxed max-w-lg">
+              Transform your ideas into stunning visuals with our advanced AI.
+              Create professional-quality images in seconds.
+            </p>
+            <div className="flex items-center space-x-6 pt-4">
+              <div className="flex items-center space-x-2">
+                <Zap className="w-5 h-5 text-cyan-400" />
+                <span className="text-gray-300">Lightning Fast</span>
+              </div>
+              <div className="flex items-center space-x-2">
+                <Palette className="w-5 h-5 text-purple-400" />
+                <span className="text-gray-300">Multiple Styles</span>
+              </div>
+            </div>
+            <button
+              onClick={() => document.getElementById('generator')?.scrollIntoView({ behavior: 'smooth' })}
+              className="bg-gradient-to-r from-cyan-500 to-purple-600 text-white px-8 py-4 rounded-2xl font-semibold hover:from-cyan-600 hover:to-purple-700 transition-all duration-300 transform hover:scale-105 shadow-xl hover:shadow-2xl"
+            >
+              Discover our solutions
+            </button>
+          </div>
+
+          <div className="relative w-full h-96 lg:h-[500px] rounded-3xl overflow-hidden bg-gradient-to-br from-gray-800 to-gray-900 shadow-2xl">
+            {generatedImages.length > 0 ? (
+              <>
+                <img
+                  src={generatedImages[currentImageIndex]}
+                  alt="Generated AI Image"
+                  className="w-full h-full object-cover transition-opacity duration-1000"
+                />
+                <div className="absolute bottom-4 left-4 right-4 flex justify-center space-x-2">
+                  {generatedImages.map((_, index) => (
+                    <button
+                      key={index}
+                      onClick={() => setCurrentImageIndex(index)}
+                      className={`w-3 h-3 rounded-full transition-all duration-300 ${index === currentImageIndex ? 'bg-white' : 'bg-white/40'
+                        }`}
+                    />
+                  ))}
+                </div>
+              </>
+            ) : (
+              <div className="w-full h-full flex items-center justify-center">
+                <div className="text-center text-gray-400">
+                  <ImageIcon className="w-24 h-24 mx-auto mb-4 opacity-20" />
+                  <p className="text-lg">Your generated images will appear here</p>
+                </div>
               </div>
             )}
           </div>
         </div>
 
-        {/* Current Generated Images */}
-        {currentImages.length > 0 && (
-          <div className="mb-12">
-            <h2 className="text-2xl font-bold text-gray-800 mb-6 text-center">Generated Images</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-4xl mx-auto">
-              {currentImages.map((image, index) => (
-                <div
-                  key={index}
-                  className="group relative bg-white rounded-2xl shadow-lg overflow-hidden transform hover:scale-[1.02] transition-all duration-300 animate-fadeIn"
+        {/* Generator Section */}
+        <div id="generator" className="mt-24 lg:mt-32">
+          <div className="bg-white/5 backdrop-blur-xl rounded-3xl p-8 lg:p-12 border border-white/10 shadow-2xl">
+            <div className="text-center mb-12">
+              <h2 className="text-4xl lg:text-5xl font-bold text-white mb-4">Create Your Vision</h2>
+              <p className="text-xl text-gray-300">Describe what you want to see, and watch it come to life</p>
+            </div>
+
+            <div className="max-w-4xl mx-auto space-y-8">
+              {/* Style Selector */}
+              <div className="relative">
+                <label className="block text-white font-medium mb-3">Choose Style</label>
+                <button
+                  onClick={() => setShowStyleDropdown(!showStyleDropdown)}
+                  className="w-full bg-white/10 backdrop-blur-sm border border-white/20 rounded-2xl px-6 py-4 text-white flex items-center justify-between hover:bg-white/15 transition-all duration-300"
                 >
-                  <img
-                    src={image}
-                    alt={`Generated: ${prompt}`}
-                    className="w-full h-auto"
-                    loading="lazy"
+                  <div className="text-left">
+                    <div className="font-medium">{styles.find(s => s.id === selectedStyle)?.name}</div>
+                    <div className="text-sm text-gray-400">{styles.find(s => s.id === selectedStyle)?.description}</div>
+                  </div>
+                  <ChevronDown className={`w-5 h-5 transition-transform duration-300 ${showStyleDropdown ? 'rotate-180' : ''}`} />
+                </button>
+                {showStyleDropdown && (
+                  <div className="absolute top-full left-0 right-0 mt-2 bg-black/90 backdrop-blur-xl border border-white/20 rounded-2xl overflow-hidden z-50">
+                    {styles.map((style) => (
+                      <button
+                        key={style.id}
+                        onClick={() => {
+                          setSelectedStyle(style.id);
+                          setShowStyleDropdown(false);
+                        }}
+                        className="w-full px-6 py-4 text-left hover:bg-white/10 transition-colors duration-200"
+                      >
+                        <div className="text-white font-medium">{style.name}</div>
+                        <div className="text-sm text-gray-400">{style.description}</div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Prompt Input */}
+              <div>
+                <label className="block text-white font-medium mb-3">Describe your image</label>
+                <div className="relative">
+                  <textarea
+                    value={prompt}
+                    onChange={(e) => setPrompt(e.target.value)}
+                    placeholder="A majestic dragon flying over a futuristic city at sunset..."
+                    className="w-full bg-white/10 backdrop-blur-sm border border-white/20 rounded-2xl px-6 py-4 text-white placeholder-gray-400 focus:outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400 transition-all duration-300 h-32 resize-none"
                   />
-                  <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-20 transition-all duration-300 flex items-center justify-center">
-                    <button
-                      onClick={() => downloadImage(image, prompt)}
-                      className="opacity-0 group-hover:opacity-100 bg-white text-gray-800 p-3 rounded-full shadow-lg hover:shadow-xl transition-all duration-200 transform scale-90 group-hover:scale-100"
-                      title="Download image"
-                    >
-                      <Download className="w-5 h-5" />
-                    </button>
+                  <div className="absolute bottom-4 right-4">
+                    <Camera className="w-5 h-5 text-gray-400" />
                   </div>
                 </div>
-              ))}
-            </div>
-          </div>
-        )}
+              </div>
 
-        {/* Gallery Section */}
-        {gallery.length > 0 && (
-          <div className="bg-white rounded-3xl shadow-xl p-8 border border-gray-100">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-3">
-                <ImageIcon className="w-7 h-7 text-blue-600" />
-                Image Gallery
-              </h2>
+              {/* Generate Button */}
               <button
-                onClick={clearGallery}
-                className="text-red-600 hover:text-red-700 font-medium px-4 py-2 rounded-lg hover:bg-red-50 transition-all"
+                onClick={generateImages}
+                disabled={!prompt.trim() || isGenerating}
+                className="w-full bg-gradient-to-r from-cyan-500 to-purple-600 text-white py-6 rounded-2xl font-bold text-xl hover:from-cyan-600 hover:to-purple-700 transition-all duration-300 transform hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none shadow-xl"
               >
-                Clear Gallery
+                {isGenerating ? (
+                  <div className="flex items-center justify-center space-x-3">
+                    <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                    <span>Creating magic...</span>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-center space-x-3">
+                    <Sparkles className="w-6 h-6" />
+                    <span>Generate Images</span>
+                  </div>
+                )}
               </button>
-            </div>
 
-            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
-              {gallery.map((item) => (
-                <div
-                  key={item.id}
-                  className="group relative aspect-square bg-gray-100 rounded-xl overflow-hidden shadow-md hover:shadow-lg transition-all duration-300 transform hover:scale-105"
-                >
-                  <img
-                    src={item.url}
-                    alt={item.prompt}
-                    className="w-full h-full object-cover"
-                    loading="lazy"
-                  />
-                  <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-40 transition-all duration-300 flex items-center justify-center">
-                    <button
-                      onClick={() => downloadImage(item.url, item.prompt)}
-                      className="opacity-0 group-hover:opacity-100 bg-white text-gray-800 p-2 rounded-full shadow-lg transition-all duration-200"
-                      title={`Download: ${item.prompt.slice(0, 50)}...`}
-                    >
-                      <Download className="w-4 h-4" />
-                    </button>
-                  </div>
-                  <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black to-transparent p-3 opacity-0 group-hover:opacity-100 transition-all duration-300">
-                    <p className="text-white text-xs truncate">{item.prompt}</p>
-                  </div>
+              {/* Generated Images Grid */}
+              {generatedImages.length > 0 && (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-8">
+                  {generatedImages.map((image, index) => (
+                    <div key={index} className="relative group">
+                      <div className="relative overflow-hidden rounded-2xl bg-gray-800 aspect-square">
+                        <img
+                          src={image}
+                          alt={`Generated ${index + 1}`}
+                          className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+                        />
+                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors duration-300"></div>
+                        <button
+                          onClick={() => downloadImage(image, index)}
+                          className="absolute top-4 right-4 bg-white/20 backdrop-blur-sm text-white p-3 rounded-full hover:bg-white/30 transition-all duration-300 opacity-0 group-hover:opacity-100 transform translate-y-2 group-hover:translate-y-0"
+                        >
+                          <Download className="w-5 h-5" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-              ))}
+              )}
             </div>
           </div>
-        )}
+        </div>
+
+        <footer className="mt-24 pb-12 text-center text-gray-400">
+        </footer>
       </div>
     </div>
   );
 };
 
-const App: React.FC = () => {
-  return (
-    <ApolloProvider client={client}>
-      <ImageGenerator />
-    </ApolloProvider>
-  );
-};
-
-export default App;
+export default AIImageGenerator;
