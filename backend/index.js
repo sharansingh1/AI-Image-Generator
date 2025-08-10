@@ -150,7 +150,6 @@ const server = new ApolloServer({
     resolvers,
     cors: {
         origin: [
-            'http://localhost:3000',
             'https://ai-image-generator-sandy-five.vercel.app'
         ],
 
