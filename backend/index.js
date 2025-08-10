@@ -149,7 +149,11 @@ const server = new ApolloServer({
     typeDefs,
     resolvers,
     cors: {
-        origin: 'http://localhost:3000',
+        origin: [
+            'http://localhost:3000',
+            'https://ai-image-generator-sandy-five.vercel.app'
+        ],
+
         credentials: true
     }
 })
