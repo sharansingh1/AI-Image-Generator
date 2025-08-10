@@ -145,19 +145,28 @@ const resolvers = {
     },
 }
 
+// Environment-based CORS configuration
+const allowedOrigins = process.env.NODE_ENV === 'production'
+    ? [
+        'https://ai-image-generator-sandy-five.vercel.app',
+        'https://ai-image-generator-git-main-sharans-projects-b657e838.vercel.app',
+        'https://ai-image-generator-799ncywgg-sharans-projects-b657e838.vercel.app'
+    ]
+    : ['http://localhost:3000'];
+
+console.log('🔐 CORS allowed origins:', allowedOrigins);
+console.log('🌍 Environment:', process.env.NODE_ENV || 'development');
+
 const server = new ApolloServer({
     typeDefs,
     resolvers,
     cors: {
-        origin: [
-            'https://ai-image-generator-sandy-five.vercel.app'
-        ],
-
+        origin: allowedOrigins,
         credentials: true
     }
 })
 
-server.listen({ port: 4000 }).then(({ url }) => {
+server.listen({ port: process.env.PORT || 4000 }).then(({ url }) => {
     console.log(`🚀 Server ready at ${url}`)
     console.log('🌸 Using Pollinations AI for image generation')
     console.log('🆓 Completely free - no API key required!')
