@@ -145,23 +145,43 @@ const resolvers = {
     },
 }
 
-// Environment-based CORS configuration
-const allowedOrigins = process.env.NODE_ENV === 'production'
-    ? [
-        'https://ai-image-generator-sandy-five.vercel.app',
-        'https://ai-image-generator-git-main-sharans-projects-b657e838.vercel.app',
-        'https://ai-image-generator-799ncywgg-sharans-projects-b657e838.vercel.app'
-    ]
-    : ['http://localhost:3000'];
+// More robust CORS configuration that handles all scenarios
+const allowedOrigins = [
+    'http://localhost:3000',
+    'https://ai-image-generator-sandy-five.vercel.app',
+    // Allow all your Vercel preview deployments
+    /^https:\/\/ai-image-generator-.*\.vercel\.app$/
+];
 
-console.log('🔐 CORS allowed origins:', allowedOrigins);
+console.log('🔐 CORS configuration:', allowedOrigins);
 console.log('🌍 Environment:', process.env.NODE_ENV || 'development');
 
 const server = new ApolloServer({
     typeDefs,
     resolvers,
     cors: {
-        origin: allowedOrigins,
+        origin: (origin, callback) => {
+            // Allow requests with no origin (like mobile apps or curl requests)
+            if (!origin) return callback(null, true);
+
+            // Check if origin matches any allowed pattern
+            const isAllowed = allowedOrigins.some(allowedOrigin => {
+                if (typeof allowedOrigin === 'string') {
+                    return allowedOrigin === origin;
+                } else if (allowedOrigin instanceof RegExp) {
+                    return allowedOrigin.test(origin);
+                }
+                return false;
+            });
+
+            console.log(`🔍 CORS check for origin: ${origin} - ${isAllowed ? 'ALLOWED' : 'BLOCKED'}`);
+
+            if (isAllowed) {
+                callback(null, true);
+            } else {
+                callback(new Error('Not allowed by CORS'));
+            }
+        },
         credentials: true
     }
 })
